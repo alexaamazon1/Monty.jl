@@ -136,7 +136,7 @@ tocsv
 ### Container
 
 ```@docs
-Monty.Simulating.Simulation
+Simulation
 clear!
 ```
 

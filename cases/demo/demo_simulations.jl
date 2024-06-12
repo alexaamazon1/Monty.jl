@@ -1,11 +1,25 @@
-using DrWatson
-@quickactivate "cases"
+using Pkg
+Pkg.activate(dirname(@__DIR__))
+Pkg.instantiate()
+
 using Monty
 using Random
 using Distributions
 using Meshes
 using GeoStatsFunctions
 using GeoStatsProcesses
+
+##
+
+const plotdir = joinpath(@__DIR__, "plots")
+if !isdir(plotdir)
+    mkpath(plotdir)
+end
+
+const resultdir = joinpath(@__DIR__, "results", "simulation")
+if !isdir(resultdir)
+    mkpath(resultdir)
+end
 
 ##
 
@@ -46,7 +60,7 @@ ax = Mke.Axis(
 viz!(ax, treatment, showfacets=true, label="treatment area")
 viz!(ax, control, color="gray", showfacets=true, label="control area")
 Mke.Legend(fig[1, 2], ax, framevisible=false)
-Mke.save(projectdir("demo", "figures", "sample_plan.png"), fig)
+Mke.save(joinpath(plotdir, "sample_plan.png"), fig)
 fig
 
 ##
@@ -125,16 +139,14 @@ end
 
 ##
 
-tonetcdf(projectdir("demo", "results", "simulations", "demo.nc"), sims)
+tonetcdf(joinpath(resultdir, "demo.nc"), sims)
 
-foreach(
-    i -> tocsv(
-        projectdir("demo", "results", "simulations", "csv", "demo_$i.csv"),
-        sims,
-        i,
-    ),
-    1:nsim,
-)
+csvdir = joinpath(resultdir, "csv")
+if !isdir(csvdir)
+    mkpath(csvdir)
+end
+
+foreach(i -> tocsv(joinpath(csvdir, "demo_$i.csv"), sims, i), 1:nsim)
 
 ##
 
@@ -164,7 +176,7 @@ Mke.Colorbar(
     colormap=:viridis,
     label="Applied Feedstock [kg/m^2]",
 )
-Mke.save(projectdir("demo", "figures", "spreading_realizations.png"), fig)
+Mke.save(joinpath(plotdir, "spreading_realizations.png"), fig)
 fig
 
 ##
@@ -275,6 +287,6 @@ s = Mke.scatter!(
 )
 Mke.Colorbar(fig[3, 4], s)
 
-Mke.save(projectdir("demo", "figures", "simulation.png"), fig)
+Mke.save(joinpath(plotdir, "simulation.png"), fig)
 
 ##

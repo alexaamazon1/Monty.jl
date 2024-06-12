@@ -1,5 +1,7 @@
-using DrWatson
-@quickactivate "scripts"
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.instantiate()
+
 using Monty
 using Random
 using Distributions
@@ -12,6 +14,13 @@ using QuasiMonteCarlo
 ##
 
 import CairoMakie as Mke
+
+##
+
+const plotdir = joinpath(@__DIR__, "plots")
+if !isdir(plotdir)
+    mkpath(plotdir)
+end
 
 ##
 
@@ -74,7 +83,7 @@ Mke.barplot!(
     width=0.9,
 )
 Mke.vlines!(ax, 0, color=:black)
-Mke.save(projectdir("plots", "gradient_sensitivity.png"), fig)
+Mke.save(joinpath(plotdir, "gradient_sensitivity.png"), fig)
 fig
 
 ##
@@ -130,7 +139,7 @@ ax = Mke.Axis(
 Mke.barplot!(ax, 1:length(labels), sen.ST, color=:gray)
 Mke.hlines!(ax, 0, color=:black)
 
-Mke.save(projectdir("plots", "sobol_sensitivity.png"), fig)
+Mke.save(joinpath(plotdir, "sobol_sensitivity.png"), fig)
 fig
 
 ##

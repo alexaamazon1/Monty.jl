@@ -109,6 +109,8 @@ end
 #------------------------------------------------------------------------------
 export SamplePlan, GeoTable, boundingbox
 
+_sample_plan_input(x, sortidx) = view(x, sortidx) |> copy |> ReadOnlyArray
+
 """A `SamplePlan` represents the intended locations and times for all samples in a simulated deployment, in addition to whether target samples are control samples (no feedstock spreading). Generally, it's easiest to construct a sample plan using either the [`pairedsampleplan`](@ref) or [`randomsampleplan`](@ref) functions. The fields of a `SamplePlan` are [`ReadOnlyArray`](https://github.com/bkamins/ReadOnlyArrays.jl) types that cannot be modified.
 
 The fields are
@@ -140,11 +142,11 @@ struct SamplePlan{𝒯}
         # the location indices will be sorted
         idx = sortperm(location)
         new{𝒯}(
-            location[idx] |> copy |> ReadOnlyArray,
-            round[idx] |> copy |> ReadOnlyArray,
-            time[idx] |> copy |> ReadOnlyArray,
-            control[idx] |> copy |> ReadOnlyArray,
-            points[idx] |> copy |> ReadOnlyArray,
+            _sample_plan_input(location, idx),
+            _sample_plan_input(round, idx),
+            _sample_plan_input(time, idx),
+            _sample_plan_input(control, idx),
+            _sample_plan_input(points, idx),
         )
     end
 end

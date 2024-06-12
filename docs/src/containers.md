@@ -4,11 +4,7 @@
 
 ## `SamplePlan`
 
-The [`SamplePlan`](@ref) defines the ideal outcome for a sampling strategy. Its docstring is presented below.
-
-```@docs
-SamplePlan
-```
+The [`SamplePlan`](@ref) defines the ideal outcome for a sampling strategy.
 
 As the docstring indicates, a sample plan contains fields for the location, sampling round, time, control status, and coordinates (points) of each point in the sampling plan. These fields are all flat vectors (1-dimensional) and a `SamplePlan` functions is much like a table with these vectors in its columns. Because of this, it can easily be converted to a `GeoTable`. Also, note that the fields of a sample plan are `ReadOnly`. They can't be modified once constructed.
 
@@ -67,10 +63,8 @@ coreset.points
 
 ## `Simulation`
 
-The [`Simulation`](@ref) container is the big one. Here is the docstring:
-```@docs
-Simulation
-```
+The [`Simulation`](@ref) container is the biggest one and it's worth looking at the docstring to see all it's internal fields.
+
 The `nsamp` and `ncore` fields are just integers indicating the total number of samples and cores in the plan. The `a` field is a scalar indicating the cross-sectional area of the soil cores. Most of the other fields are matrices (two-dimensional arrays) of numbers *or* named tuples of matrices. If the fields apply to multiple analytes, they contain named tuples of matrices where the keys/names indicated the analyte names. The `cores` field is a matrix of soil [`Sample`](@ref) types and the `composites` field is a flat vector for the results of compositing/combining the `cores`. The `measurements` field is also a vectors, which stores the results of applying random measurement error to the `composites`.
 
 Allocating a simulation container is usually easiest with a pre-existing `CoreSet`. For example, using the one from above:

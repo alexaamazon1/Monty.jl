@@ -30,7 +30,7 @@ cationCO2(cation::String) = cation |> Symbol |> cationCO2
 
 """$(TYPEDSIGNATURES)
 Computes the maximum amount of CDR available for a given feedstock composition."""
-function cdrpotential(cation, concentration)
+function cdrpotential(cation::Union{Symbol,String}, concentration)
     cationCO2(cation) * concentration
 end
 
