@@ -1,0 +1,52 @@
+name: checks
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+
+  tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        julia-version: ['1.10']
+        julia-arch: [x64, x86]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        exclude:
+          - os: macOS-latest
+            julia-arch: x86
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.julia-version }}
+          arch: ${{ matrix.julia-arch }}
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v3
+        - uses: julia-actions/setup-julia@v2
+          with:
+              version: '1.10'
+        - name: Install Formatter
+          run: julia -e 'using Pkg; Pkg.add("JuliaFormatter")'
+        - name: Check Formatting
+          run: |
+            julia -e '
+              using JuliaFormatter;
+              formatted = format(["src/", "test/", "benchmark/"], overwrite=false);
+              formatted ? exit(0) : exit(1)
+            '
+          id: format
+        - name: Status
+          if: steps.format.outcome == 'failure'
+          run: exit 1

@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "cases"
+version = "0.1.0"
+description = "Monty demonstration and verification cases"
+authors = ["Mark Baum"]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+numpy = "^1.26.4"
+pandas = "^2.2.1"
+matplotlib = "^3.8.3"
+seaborn = "^0.13.2"
+pymc = "^5.11.0"
+arviz = "^0.17.1"
+xarray = "^2024.2.0"
+ipykernel = "^6.29.3"
+scipy = "^1.12.0"
+graphviz = "^0.20.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

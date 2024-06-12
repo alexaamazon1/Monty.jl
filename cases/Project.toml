@@ -1,0 +1,10 @@
+name = "cases"
+
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+GeoStatsFunctions = "6771c435-bc22-4842-b0c3-41852a255103"
+GeoStatsProcesses = "aa102bde-5a27-4b0c-b2c1-e7a7dcc4c3e7"
+Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
+Monty = "68884aec-e772-4522-9339-20673b8a074f"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"

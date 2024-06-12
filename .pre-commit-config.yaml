@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # list of supported hooks: https://pre-commit.com/hooks.html
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=10000", "--enforce-all"]
+
+  - repo: local
+    hooks:
+      - id: format
+        name: format Julia
+        description: Format all Julia source files
+        fail_fast: true
+        language: system
+        entry: |
+          julia -e '
+          using Pkg
+          Pkg.activate(temp=true, io=devnull)
+          Pkg.add("JuliaFormatter", io=devnull)
+          using JuliaFormatter
+          format(".", overwrite=true)'
+
+      - id: test
+        name: run tests
+        description: run package tests
+        fail_fast: true
+        language: system
+        entry: julia --project='.' -e 'using Pkg; Pkg.test("Monty")'
