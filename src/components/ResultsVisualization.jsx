@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BoxPlot, ScatterChart, Scatter } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ScatterChart, Scatter } from 'recharts'
 
 const ResultsVisualization = ({ results }) => {
   const [activeTab, setActiveTab] = useState('concentrations')
