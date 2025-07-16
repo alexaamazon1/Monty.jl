@@ -32,108 +32,147 @@ async function checkJulia() {
 
 // Generate Julia simulation script
 function generateJuliaScript(params) {
-  return `
-using Pkg
-Pkg.activate(".")
+  // Parse time points
+  const timePoints = params.sampling?.timePoints 
+    ? params.sampling.timePoints.split(',').map(t => parseFloat(t.trim())).filter(t => !isNaN(t))
+    : [-0.003, 0.0, 1.0];
 
+  return `
+using DrWatson
+@quickactivate "cases"
 using Monty
 using Random
 using Distributions
 using Meshes
+using GeoStatsFunctions
+using GeoStatsProcesses
 using JSON
 
 # Set random seed for reproducibility
-const rng = Xoshiro(42)
+const rng = Xoshiro(${params.execution?.randomSeed || 1})
 
-# Simulation parameters
-const application_rate = ${params.applicationRate}
-const feedstock_ca = ${params.feedstockCa}
-const feedstock_mg = ${params.feedstockMg}
-const soil_ca = ${params.soilCa}
-const soil_mg = ${params.soilMg}
-const leaching_rate_ca = ${params.leachingRateCa}
-const leaching_rate_mg = ${params.leachingRateMg}
-const sampling_depth = ${params.samplingDepth}
-const num_samples = ${params.numSamples}
-const num_realizations = ${params.numRealizations}
-const time_points = [${params.timePoints.join(', ')}]
+# Grid configuration
+grid = CartesianGrid((${params.grid?.xSize || 8}, ${params.grid?.ySize || 8}), (0.0, 0.0), (${params.grid?.cellWidth || 10.0}, ${params.grid?.cellHeight || 10.0}))
 
-# Create a simple field geometry
-field = Ball((0.0, 0.0), 50.0)
+# Split treatment and control cells, alternating
+treatment = reduce(vcat, [grid[i, :] for i ∈ 1:2:${params.grid?.xSize || 8}])
+control = reduce(vcat, [grid[i, :] for i ∈ 2:2:${params.grid?.xSize || 8}])
 
-# Create sample plan
-plan = randomsampleplan(rng, field, num_samples, time_points)
-samp = CoreSet(plan, 5)  # 5 cores per sample
+# Take cell centroids for each group
+treatment_points = treatment .|> centroid
+control_points = control .|> centroid
+
+# Sampling plan with specified time points
+time_points = [${timePoints.join(', ')}]
+plan = pairedsampleplan(grid .|> centroid, control, time_points)
+
+# Core sampling configuration
+samp = CoreSet(plan, ${params.sampling?.coresPerSample || 5})
+
+# Allocate space for the simulation
 sim = Simulation((:Ca, :Mg), samp)
 
-# Run multiple realizations
-all_results = []
+# Feedstock density
+sim.ρf .= ${params.feedstock?.density || 1000}
 
-for realization in 1:num_realizations
-    # Execute plan with some jitter
+# Spreading patterns with spatial correlation
+Q_μ = ${params.feedstock?.applicationRate || 3.5}
+Q = GaussianSimulator(samp, Q_μ)
+Q_cov = GaussianCovariance(
+    MetricBall((${params.covariance?.appRangeX || 5.0}, ${params.covariance?.appRangeY || 500.0})),
+    nugget=(3 / 10)^2,
+    sill=(3 / 6)^2,
+)
+
+# Cross-correlated baseline soil concentrations
+cs = GaussianCosimulator(samp, (Ca=${params.soil?.caConcentration || 0.002}, Mg=${params.soil?.mgConcentration || 0.001}), ${params.soil?.crossCorrelation || 0.75})
+cs_cov = SphericalCovariance(nugget=(0.001 / 10)^2, sill=(0.001 / 6)^2, range=${params.covariance?.soilRange || 20.0})
+
+# Soil spatial structure
+ρs = GaussianSimulator(samp, ${params.soil?.density || 1000.0})
+ρs_cov = SphericalCovariance(nugget=20^2, sill=100^2, range=${params.covariance?.densityRange || 30.0})
+
+# Stencil configuration
+${getStencilCode(params.sampling?.stencilType, params.sampling?.stencilSize, params.sampling?.coresPerSample)}
+
+# Jitter configuration
+samplerjitter = Jitter(${params.jitter?.sampler || 0.75})
+corejitter = Jitter(${params.jitter?.core || 0.1})
+plannedjitter = GridCentroidJitter(${params.grid?.cellWidth || 10.0}, ${params.jitter?.planned || 5.0}, seed=1)
+
+# Leaching models for each element
+Ca_leaching = ExponentialLeaching(λ=${params.leaching?.caRate || 0.4})
+Mg_leaching = ExponentialLeaching(λ=${params.leaching?.mgRate || 0.8})
+
+# Number of simulations
+nsim = ${params.execution?.numRealizations || 1000}
+
+# Run simulation stack
+sims = simulationstack(nsim, sim, samp, plan) do
     executeplan!(
         samp,
         plan,
-        stencil=CircleStencil(5, 1.0),
-        samplerjitter=Jitter(1.0),
-        corejitter=Jitter(0.1)
+        stencil=stencil,
+        plannedjitter=plannedjitter,
+        samplerjitter=samplerjitter,
+        corejitter=corejitter,
     )
-    
-    # Set up simulation parameters
-    unmixed!(rng, sim, depth=TriangularDist(sampling_depth * 0.8, sampling_depth * 1.2))
-    
-    # Application rate with some variability
-    rand!(rng, Normal(application_rate, application_rate * 0.1), sim.Q)
-    
-    # Feedstock properties
-    sim.ρf .= 2e3  # feedstock density
-    feedstockconcentration!(rng, sim, (Ca=feedstock_ca, Mg=feedstock_mg), 0.05)
-    
-    # Soil properties
-    rand!(rng, Normal(1e3, 100), sim.ρs)  # soil density
-    rand!(rng, Normal(soil_ca, soil_ca * 0.1), sim.cs[:Ca])
-    rand!(rng, Normal(soil_mg, soil_mg * 0.1), sim.cs[:Mg])
-    
-    # Leaching models
-    leaching!(sim, :Ca, ExponentialLeaching(λ=leaching_rate_ca), plan)
-    leaching!(sim, :Mg, ExponentialLeaching(λ=leaching_rate_mg), plan)
-    
-    # Mass loss (simple average of elemental losses)
+
+    updategaussian!(Q, samp.points, Q_cov)
+    spreading!(rng, sim, plan, Q)
+
+    ${getMixingCode(params.mixing?.type, params.mixing?.minDepth, params.mixing?.maxDepth)}
+
+    updategaussian!(ρs, samp.points, ρs_cov)
+    rand!(rng, ρs, view(sim.ρs, :))
+
+    feedstockconcentration!(rng, sim, (Ca=${params.feedstock?.caConcentration || 0.07}, Mg=${params.feedstock?.mgConcentration || 0.05}), ${params.feedstock?.concentrationVariability || 0.03})
+
+    updategaussian!(cs, samp.points, cs_cov)
+    soilconcentration!(rng, sim, cs)
+
+    leaching!(sim, :Ca, Ca_leaching, plan)
+    leaching!(sim, :Mg, Mg_leaching, plan)
+
     massloss!(sim, plan, x -> (x[:Ca] + x[:Mg]) / 2)
-    
-    # Analyze samples with measurement error
-    analyze!(rng, sim, (Ca=0.03, Mg=0.03), 0.005)
-    
-    # Extract results for this realization
-    for i in 1:length(sim.measurements)
+
+    analyze!(rng, sim, (Ca=${params.execution?.caMeasurementError || 0.03}, Mg=${params.execution?.mgMeasurementError || 0.03}), ${params.execution?.massMeasurementError || 0.005})
+end
+
+# Convert simulation results to JSON format
+all_results = []
+for realization in 1:nsim
+    for sample in 1:size(sims[:data], 3)
         push!(all_results, Dict(
             "realization" => realization,
-            "sample" => i,
-            "time" => plan.time[i],
-            "Ca" => sim.measurements[i][:Ca],
-            "Mg" => sim.measurements[i][:Mg],
-            "mass" => sim.measurements[i].mass,
-            "control" => plan.control[i]
+            "sample" => sample,
+            "time" => sims[:time][sample],
+            "Ca" => sims[:data][realization, 1, sample],
+            "Mg" => sims[:data][realization, 2, sample], 
+            "mass" => sims[:data][realization, 3, sample],
+            "control" => sims[:control][sample],
+            "x" => sims[:x][realization, sample],
+            "y" => sims[:y][realization, sample]
         ))
     end
 end
 
 # Calculate summary statistics
-ca_values = [r["Ca"] for r in all_results]
-mg_values = [r["Mg"] for r in all_results]
+ca_values = [r["Ca"] for r in all_results if !isnan(r["Ca"])]
+mg_values = [r["Mg"] for r in all_results if !isnan(r["Mg"])]
 
 summary_stats = Dict(
     "Ca" => Dict(
-        "mean" => mean(ca_values),
-        "std" => std(ca_values),
-        "min" => minimum(ca_values),
-        "max" => maximum(ca_values)
+        "mean" => isempty(ca_values) ? NaN : mean(ca_values),
+        "std" => isempty(ca_values) ? NaN : std(ca_values),
+        "min" => isempty(ca_values) ? NaN : minimum(ca_values),
+        "max" => isempty(ca_values) ? NaN : maximum(ca_values)
     ),
     "Mg" => Dict(
-        "mean" => mean(mg_values),
-        "std" => std(mg_values),
-        "min" => minimum(mg_values),
-        "max" => maximum(mg_values)
+        "mean" => isempty(mg_values) ? NaN : mean(mg_values),
+        "std" => isempty(mg_values) ? NaN : std(mg_values),
+        "min" => isempty(mg_values) ? NaN : minimum(mg_values),
+        "max" => isempty(mg_values) ? NaN : maximum(mg_values)
     )
 )
 
@@ -141,19 +180,7 @@ summary_stats = Dict(
 output = Dict(
     "data" => all_results,
     "summary" => summary_stats,
-    "parameters" => Dict(
-        "applicationRate" => application_rate,
-        "feedstockCa" => feedstock_ca,
-        "feedstockMg" => feedstock_mg,
-        "soilCa" => soil_ca,
-        "soilMg" => soil_mg,
-        "leachingRateCa" => leaching_rate_ca,
-        "leachingRateMg" => leaching_rate_mg,
-        "samplingDepth" => sampling_depth,
-        "numSamples" => num_samples,
-        "numRealizations" => num_realizations,
-        "timePoints" => time_points
-    )
+    "parameters" => $(JSON.stringify(params))
 )
 
 # Write results to JSON file
@@ -163,6 +190,43 @@ end
 
 println("Simulation completed successfully!")
 `
+}
+
+// Helper function to generate stencil code
+function getStencilCode(stencilType, stencilSize, coresPerSample) {
+  const size = stencilSize || 2.0;
+  const cores = coresPerSample || 5;
+  
+  switch (stencilType) {
+    case 'circle':
+      return `stencil = CircleStencil(${cores}, ${size})`;
+    case 'hubspoke':
+      return `stencil = HubSpokeStencil(${cores}, ${size})`;
+    case 'line':
+      return `stencil = LineStencil(${cores}, ${size})`;
+    case 'random':
+      return `stencil = RandomStencil(${cores}, ${size})`;
+    default:
+      return `stencil = CircleStencil(${cores}, ${size})`;
+  }
+}
+
+// Helper function to generate mixing code
+function getMixingCode(mixingType, minDepth, maxDepth) {
+  const min = minDepth || 0.05;
+  const max = maxDepth || 0.15;
+  
+  switch (mixingType) {
+    case 'triangular':
+      return `triangularmixing!(rng, sim, depth=TriangularDist(${min}, ${max}), upper=Uniform(0.0, 0.5))`;
+    case 'uniform':
+      return `uniformmixing!(rng, sim, depth=TriangularDist(${min}, ${max}), upper=Uniform(0.0, 0.5))`;
+    case 'exponential':
+      return `exponentialmixing!(rng, sim, depth=TriangularDist(${min}, ${max}), scale=Uniform(0.01, 0.1))`;
+    case 'unmixed':
+    default:
+      return `unmixed!(rng, sim, depth=TriangularDist(${min}, ${max}))`;
+  }
 }
 
 // API Routes

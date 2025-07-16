@@ -6,17 +6,77 @@ import { runSimulation } from './services/api'
 
 function App() {
   const [simulationParams, setSimulationParams] = useState({
-    applicationRate: 3.0,
-    feedstockCa: 0.07,
-    feedstockMg: 0.05,
-    soilCa: 0.002,
-    soilMg: 0.001,
-    leachingRateCa: 0.8,
-    leachingRateMg: 1.2,
-    samplingDepth: 0.1,
-    numSamples: 50,
-    numRealizations: 100,
-    timePoints: [0, 0.5, 1.0]
+    // Grid configuration (from main.jl: 8x8 grid, 10x10m cells)
+    grid: {
+      xSize: 8,
+      ySize: 8,
+      cellWidth: 10.0,
+      cellHeight: 10.0
+    },
+    
+    // Sampling configuration (from main.jl)
+    sampling: {
+      coresPerSample: 5,
+      timePoints: "-0.003, 0.0, 1.0",
+      stencilType: "circle",
+      stencilSize: 2.0
+    },
+    
+    // Feedstock parameters (from main.jl)
+    feedstock: {
+      applicationRate: 3.5,           // Q_μ
+      density: 1000,                  // sim.ρf
+      caConcentration: 0.07,          // feedstock Ca
+      mgConcentration: 0.05,          // feedstock Mg
+      concentrationVariability: 0.03 // RSD for concentrations
+    },
+    
+    // Soil parameters (from main.jl)
+    soil: {
+      density: 1000,                  // soil density mean
+      caConcentration: 0.002,         // background Ca
+      mgConcentration: 0.001,         // background Mg
+      crossCorrelation: 0.75          // cross-correlation for Ca/Mg
+    },
+    
+    // Mixing model (from main.jl: unmixed with triangular depth)
+    mixing: {
+      type: "unmixed",
+      minDepth: 0.05,
+      maxDepth: 0.15
+    },
+    
+    // Leaching models (from main.jl)
+    leaching: {
+      caRate: 0.4,                    // Ca_leaching λ
+      mgRate: 0.8,                    // Mg_leaching λ
+      modelType: "exponential"
+    },
+    
+    // Jitter parameters (from main.jl)
+    jitter: {
+      sampler: 0.75,                  // samplerjitter
+      core: 0.1,                      // corejitter
+      planned: 5.0                    // plannedjitter GridCentroidJitter
+    },
+    
+    // Covariance parameters (from main.jl)
+    covariance: {
+      applicationType: "gaussian",
+      appRangeX: 5.0,                 // Q_cov MetricBall
+      appRangeY: 500.0,               // Q_cov MetricBall
+      soilRange: 20.0,                // cs_cov SphericalCovariance range
+      densityRange: 30.0              // ρs_cov SphericalCovariance range
+    },
+    
+    // Execution parameters (from main.jl)
+    execution: {
+      numRealizations: 10000,         // nsim
+      randomSeed: 1,
+      caMeasurementError: 0.03,       // analyze! Ca error
+      mgMeasurementError: 0.03,       // analyze! Mg error
+      massMeasurementError: 0.005     // analyze! mass error
+    }
   })
   
   const [results, setResults] = useState(null)
